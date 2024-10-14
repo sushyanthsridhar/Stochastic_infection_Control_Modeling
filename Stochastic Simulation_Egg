@@ -1,0 +1,157 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import random  # Import random module
+from google.colab import files
+
+# Upload and read the Excel files
+uploaded = files.upload()  # Use this in Colab to upload the files
+df_eggs = pd.read_excel('Egg Counts.xlsx')  # Egg counts file
+df_temp = pd.read_excel('Temperatures.xlsx')  # Temperature file
+
+# Extract the Egg Counts and Temperature columns
+eggs_array = df_eggs['Egg Counts'].tolist()
+temperatures = df_temp['Temperature'].tolist()
+
+# Ensure both have the same number of data points
+if len(eggs_array) != len(temperatures):
+    raise ValueError("Egg counts and temperature data must have the same number of data points!")
+
+# Regression Coefficients for mortality rate calculation
+B0 = -3.858e-2
+B1 = 7.0e-3
+B2 = 3.656e-3
+B3 = -1.0e-2
+B4 = 1.0e-2
+B5 = -5.0e-4
+B6 = 1.0e-3
+B12 = -2.5e-4
+B13 = 3.0e-4
+B23 = -1.327e-3
+B123 = 6.029e-5
+
+# Example values for other independent variables (X2 and X3)
+X2 = 10  # Temperature fluctuation
+X3 = 2   # Larval density
+
+# Function to adjust rate based on temperature thresholds
+def adjust_rate_for_temp(rate, temp):
+    if temp < 15:
+        return 0.5  # No development below 15°C
+    elif temp > 35:
+        return rate * 0.5  # High mortality at very high temps
+    return rate
+
+# List to store calculated mortality rates
+mortality_rates = []
+
+# Loop through each temperature in the data and calculate mortality rate
+for X1 in temperatures:
+    # Calculate Mortality Rate using the regression formula
+    Mortality_Rate = (B0 +
+                      (B1 * X1) +
+                      (B2 * X2) +
+                      (B3 * X3) +
+                      (B4 * (X3 ** 2)) +
+                      (B5 * (X3 ** 3)) +
+                      (B6 * (X3 ** 4)) +
+                      (B12 * X1 * X2) +
+                      (B13 * X1 * X3) +
+                      (B23 * X2 * X3) +
+                      (B123 * X1 * X2 * X3) + 0.2)
+
+    # Adjust rate for temperature
+    Adjusted_Rate = adjust_rate_for_temp(Mortality_Rate, X1)
+
+    # Append the adjusted rate to the list
+    mortality_rates.append(Adjusted_Rate)
+
+# Ensure that the length of mortality rates matches the eggs array
+assert len(mortality_rates) == len(eggs_array), "Mortality rates and egg counts do not match!"
+
+# Simulation parameters
+weeks = len(eggs_array)  # Number of weeks (from the Egg Counts file)
+larvae_array = [0] * weeks  # Initialize an array for larvae
+
+# Loop through each week and simulate with the calculated mortality rates
+for week in range(weeks):
+    # Simulate for the week using the eggs count from the Excel file
+    initial_eggs = eggs_array[week]
+    mortality_rate = mortality_rates[week]  # Use the corresponding mortality rate
+
+    # Apply mortality to the eggs
+    surviving_eggs = initial_eggs * (1 - mortality_rate)
+
+    # Calculate the larvae transition based on the number of surviving eggs
+    larvae_today = surviving_eggs * 0.4  # Assuming 30% of surviving eggs transition to larvae
+
+    # Update the number of eggs for the week, accounting for new eggs and mortality
+    eggs_today = surviving_eggs - larvae_today
+
+    # Ensure eggs don't go negative
+    eggs_array[week] = max(0, eggs_today)
+
+    # Update the number of larvae for this week
+    larvae_array[week] = larvae_today
+
+    # Generate a random multiplier between 2 and 3
+    random_multiplier = random.uniform(7, 8)
+
+    # Multiply the weekly output by this random multiplier
+    estimated_eggs = eggs_array[week] * random_multiplier
+    estimated_larvae = larvae_array[week] * random_multiplier
+
+    # Print weekly status along with the corresponding mortality rate and temperature
+    print(f"Week {week + 1}: {estimated_eggs:.2f} eggs, {estimated_larvae:.2f} larvae, "
+          f"Temperature: {temperatures[week]:.2f}°C, Mortality Rate: {mortality_rate:.4f}")
+
+# Final count after all weeks
+remaining_eggs = eggs_array[-1] * random.uniform(7, 8)  # Multiply final count by random multiplier
+total_larvae = sum(larvae_array) * random.uniform(7, 8)  # Multiply total larvae by random multiplier
+print(f"\nRemaining eggs after {weeks} weeks (estimated): {remaining_eggs:.2f}")
+print(f"Total larvae after {weeks} weeks (estimated): {total_larvae:.2f}")
+
+# Plotting the results
+weeks_range = list(range(1, weeks + 1))
+
+# Plot 1: Mortality Rates vs. Week Number
+plt.figure(figsize=(10, 6))
+plt.plot(weeks_range, mortality_rates, marker='o', color='r', label='Mortality Rate')
+plt.title('Mortality Rate vs Week Number')
+plt.xlabel('Week Number')
+plt.ylabel('Mortality Rate')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+# Plot 2: Egg Counts vs. Week Number (Estimated)
+plt.figure(figsize=(10, 6))
+plt.plot(weeks_range, [eggs * random.uniform(7, 8) for eggs in eggs_array], marker='o', color='b', label='Egg Counts (Estimated)')
+plt.title('Egg Counts vs Week Number (Estimated)')
+plt.xlabel('Week Number')
+plt.ylabel('Egg Counts (Estimated)')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+# Plot 3: Larvae Counts vs. Week Number (Estimated)
+plt.figure(figsize=(10, 6))
+plt.plot(weeks_range, [larvae * random.uniform(7, 8) for larvae in larvae_array], marker='o', color='g', label='Larvae Counts (Estimated)')
+plt.title('Larvae Counts vs Week Number (Estimated)')
+plt.xlabel('Week Number')
+plt.ylabel('Larvae Counts (Estimated)')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+larvae_sorted = np.sort(larvae_array) * random.uniform(7, 8)  # Sort and multiply larvae counts by random multiplier
+cdf = np.arange(len(larvae_sorted)) / float(len(larvae_sorted))  # Compute CDF
+
+plt.figure(figsize=(10, 6))
+plt.plot(larvae_sorted, cdf, marker='o', color='purple', label='CDF of Larvae Counts (Estimated)')
+plt.title('CDF of Larvae Counts (Estimated)')
+plt.xlabel('Larvae Counts (Estimated)')
+plt.ylabel('Cumulative Probability')
+plt.grid(True)
+plt.legend()
+plt.show()
