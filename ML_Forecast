@@ -1,0 +1,60 @@
+from sklearn.metrics import mean_squared_error, r2_score
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from prophet import Prophet
+from google.colab import files
+
+uploaded = files.upload()
+data = pd.read_excel(list(uploaded.keys())[0], sheet_name='Sheet1')
+
+data.rename(columns={'Time': 'ds', 'Mean': 'y'}, inplace=True)
+data['ds'] = pd.to_datetime(data['ds'], errors='coerce')
+data = data.drop_duplicates(subset='ds', keep='first')
+
+data['cap'] = data['y'].max() * 1.5
+data['floor'] = 0
+
+all_dates = pd.date_range(start=data['ds'].min(), end=data['ds'].max(), freq='W')
+data_full = data.set_index('ds').reindex(all_dates).reset_index()
+data_full.rename(columns={'index': 'ds'}, inplace=True)
+data_full['cap'] = data['cap'].max()
+data_full['floor'] = data['floor'].max()
+
+model = Prophet(
+    seasonality_mode='multiplicative',
+    growth='logistic',
+    changepoint_prior_scale=0.05,
+    seasonality_prior_scale=0.2
+)
+
+model.fit(data.dropna())
+future = pd.DataFrame({'ds': data_full['ds'], 'cap': data_full['cap'], 'floor': data_full['floor']})
+forecast = model.predict(future)
+
+filled_values = forecast[['ds', 'yhat']]
+data_full = data_full.merge(filled_values, on='ds', how='left')
+data_full['y'] = data_full.apply(lambda row: row['y'] if not pd.isna(row['y']) else max(row['yhat'], 0), axis=1)
+
+plt.figure(figsize=(12, 6))
+plt.plot(data_full['ds'], data_full['y'], marker='o', linestyle='-', color='blue', label='Filled Data')
+plt.scatter(data['ds'], data['y'], color='red', label='Original Data')
+plt.xlabel('Date')
+plt.ylabel('Values')
+plt.title('Time Series with Logistic Growth Filled (Original + Filled)')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+output_filename = 'predicted_values.csv'
+data_full[['ds', 'y']].to_csv(output_filename, index=False)
+print(f"Predicted values have been saved to {output_filename}.")
+
+data_full['yhat'] = forecast['yhat']
+data_non_null = data_full.dropna(subset=['y', 'yhat'])
+
+rmse = np.sqrt(mean_squared_error(data_non_null['y'], data_non_null['yhat']))
+r2 = r2_score(data_non_null['y'], data_non_null['yhat'])
+
+print(f"RMSE: {rmse}")
+print(f"R²: {r2}")
