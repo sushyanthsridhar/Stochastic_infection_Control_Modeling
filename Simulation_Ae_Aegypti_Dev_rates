@@ -1,0 +1,130 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+months = np.arange(1,25)
+
+
+
+total_days = 365
+time_steps = total_days
+days_per_month = 30
+
+initial_pop = {
+    'E': 1000,
+    'L': 0,
+    'P': 0,
+    'yA': 5,
+    'oA': 10
+}
+
+compartments = {key: np.zeros(time_steps) for key in initial_pop}
+for key, value in initial_pop.items():
+    compartments[key][0] = value
+
+
+
+
+
+def edr_f(t):
+  return 1/(120)*(1+1/4*(np.sin(t*np.pi/180 + 1.8326)))
+def ldr_f(t):
+  return 1/12*(1+1/4*(np.sin(t*np.pi/180 + 1.0472)))
+def pdr_f(t):
+  return 1/2*(1+1/4*(np.sin(t*np.pi/180 + 1.0472)))
+def yadr_f(t):
+  return 1/5
+
+dev_rates = {
+    'e_dev': np.array([edr_f(month) for month in months], dtype=float),
+    'l_dev': np.array([ldr_f(month) for month in months], dtype=float),
+    'p_dev': np.array([pdr_f(month) for month in months], dtype=float),
+    'ya_dev': np.array([yadr_f(month) for month in months], dtype=float),
+}
+
+plt.figure(figsize=(12, 8))
+for stage in dev_rates:
+    plt.plot(months, dev_rates[stage], marker='o', label=stage)
+
+plt.xlabel('Month')
+plt.ylabel('Developmental Rate')
+plt.title('Developmental Rates as a Function of Time for Each Stage')
+plt.grid(True)
+plt.xticks(months)
+plt.legend()
+plt.show()
+
+for stage, rate_array in dev_rates.items():
+    print(f"Developmental rates for {stage}:")
+    for month, rate in zip(months, rate_array):
+        print(f"  Month {month}: {rate:.4f}")
+    print()
+
+
+def emr_f(t):
+  return 0.1005*(1.05)
+def lmr_f(t):
+  return 0.10536 + 0.000001 * L[t]*(1.005)
+def pmr_f(t):
+  return 0.01005*1.05
+def yamr_f(t):
+  return 0.02020(1.05)
+def oamr_f(t):
+  return 0.06187*1.05
+
+dev_rates = {
+    'e_mor': np.array([emr_f(month) for month in months], dtype=float),
+    'l_mor': np.array([lmr_f(month) for month in months], dtype=float),
+    'p_mor': np.array([pmr_f(month) for month in months], dtype=float),
+    'ya_mor': np.array([yamr_f(month) for month in months], dtype=float),
+    'oa_mor': np.array([yamr_f(month) for month in months], dtype=float),
+
+}
+
+
+# Function to get current developmental rates based on month
+def get_current_rates(day):
+    month = (day // days_per_month) % len(months)  # Determine the current month
+    return {
+        'egg_to_larvae': dev_rates['e_dev'][month],
+        'larvae_to_pupa': dev_rates['l_dev'][month],
+        'pupa_to_adult': dev_rates['p_dev'][month],
+        'young_adult_to_old_adult': dev_rates['ya_dev'][month]
+    }
+
+# Function to update compartments
+def update_compartments(day, rates):
+    egg_to_larvae = rates['egg_to_larvae']
+    larvae_to_pupa = rates['larvae_to_pupa']
+    pupa_to_adult = rates['pupa_to_adult']
+    young_adult_to_old_adult = rates['young_adult_to_old_adult']
+
+    # Compute new values
+    new_eggs = compartments['eggs'][day - 1] - (egg_to_larvae * compartments['eggs'][day - 1])
+    new_larvae = compartments['larvae'][day - 1] + (egg_to_larvae * compartments['eggs'][day - 1]) - (larvae_to_pupa * compartments['larvae'][day - 1])
+    new_pupae = compartments['pupae'][day - 1] + (larvae_to_pupa * compartments['larvae'][day - 1]) - (pupa_to_adult * compartments['pupae'][day - 1])
+    new_young_adults = compartments['young_adults'][day - 1] + (pupa_to_adult * compartments['pupae'][day - 1]) - (young_adult_to_old_adult * compartments['young_adults'][day - 1])
+    new_adults = compartments['adults'][day - 1] + (young_adult_to_old_adult * compartments['young_adults'][day - 1])
+
+    compartments['eggs'][day] = new_eggs
+    compartments['larvae'][day] = new_larvae
+    compartments['pupae'][day] = new_pupae
+    compartments['young_adults'][day] = new_young_adults
+    compartments['adults'][day] = new_adults
+
+# Run simulation
+for day in range(1, time_steps):
+    rates = get_current_rates(day)
+    update_compartments(day, rates)
+
+# Plot results
+plt.figure(figsize=(12, 8))
+
+for compartment in compartments:
+    plt.plot(compartments[compartment], label=compartment)
+
+plt.xlabel('Day')
+plt.ylabel('Population')
+plt.title('Mosquito Population Dynamics')
+plt.legend()
+plt.grid(True)
+plt.show()
