@@ -1,0 +1,166 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from google.colab import files
+
+# Upload and read the Excel files
+uploaded = files.upload()  # Use this in Colab to upload the files
+df_larvae = pd.read_excel('Larva Counts.xlsx')  # Larva counts file
+df_temp = pd.read_excel('Temperatures.xlsx')  # Temperature file
+
+# Extract the Larva Counts and Temperature columns
+larvae_array = df_larvae['Larva Counts'].tolist()
+temperatures = df_temp['Temperature'].tolist()
+
+# Ensure both have the same number of data points
+if len(larvae_array) != len(temperatures):
+    raise ValueError("Larva counts and temperature data must have the same number of data points!")
+
+# Regression Coefficients for Mortality and Developmental Rate calculation
+B0 = 0.35
+B1 = -8.0e-4
+B2 = 0.7e-3
+B3 = 2.0e-3
+B4 = -3.5e-3
+B5 = -1.0e-4
+B6 = -1.0e-5
+B12 = 1.0e-4
+B13 = -1.0e-4
+B23 = 1.0e-5
+B123 = 5.0e-7
+
+Bo = 1.2  # Increased base value to help raise the developmental rate at higher temperatures
+Ba = 8.0e-3
+Bb = 0.5e-3
+Bc = 0.2e-2
+Bd = 0.1e-3
+Be = -0.5e-4
+Bf = -0.5e-5
+Bab = 1.0e-4
+Bac = 0.5e-4
+Bbc = 0.5e-5
+Babc = -0.5e-7
+
+X2 = 10  # Temperature fluctuation
+X3 = 2   # Larval density
+
+# Function to adjust rate based on temperature thresholds
+def adjust_rate_for_temp(rate, temp):
+    if temp < 15:
+        return 0.5  # No development below 15°C
+    elif temp > 35:
+        return rate * 0.5  # High mortality at very high temps
+    return rate
+
+# Lists to store calculated mortality and developmental rates
+mortality_rates = []
+developmental_rates = []
+
+# Loop through each temperature in the data and calculate both rates
+for X1 in temperatures:
+    Mortality_Rate = (B0 + (B1 * X1) + (B2 * X2) + (B3 * X3) + (B4 * (X3 ** 2)) + (B5 * (X3 ** 3)) +
+                      (B6 * (X3 ** 4)) + (B12 * X1 * X2) + (B13 * X1 * X3) + (B23 * X2 * X3) + (B123 * X1 * X2 * X3))
+    Adjusted_Mortality_Rate = adjust_rate_for_temp(Mortality_Rate, X1)
+    mortality_rates.append(Adjusted_Mortality_Rate)
+
+    Developmental_Rate = (Bo + (Ba * X1) + (Bb * X2) + (Bc * X3) + (Bd * (X3 ** 2)) + (Be * (X3 ** 3)) +
+                          (Bf * (X3 ** 4)) + (Bab * X1 * X2) + (Bac * X1 * X3) + (Bbc * X2 * X3) + (Babc * X1 * X2 * X3) + 0.1)
+    Adjusted_Developmental_Rate = adjust_rate_for_temp(Developmental_Rate, X1)
+    developmental_rates.append(Adjusted_Developmental_Rate)
+
+# Ensure that the length of both rates matches the larvae array
+assert len(mortality_rates) == len(larvae_array), "Mortality rates and larva counts do not match!"
+assert len(developmental_rates) == len(larvae_array), "Developmental rates and larva counts do not match!"
+
+# Simulation parameters
+weeks = len(larvae_array)  # Number of weeks (from the Larva Counts file)
+pupa_array = [0] * weeks  # Initialize an array for pupa counts
+
+# List to store results for CSV export
+output_data = []
+
+# Loop through each week and simulate with the calculated mortality and developmental rates
+for week in range(weeks):
+    initial_larvae = larvae_array[week]
+    mortality_rate = mortality_rates[week]
+    developmental_rate = developmental_rates[week]
+
+    surviving_larvae = initial_larvae * (1 - mortality_rate)
+    pupa_today = surviving_larvae * developmental_rate
+    larvae_today = surviving_larvae - pupa_today
+
+    larvae_array[week] = max(0, larvae_today)
+    pupa_array[week] = pupa_today
+
+    output_data.append({
+        'Week': week + 1,
+        'Temperature': temperatures[week],
+        'Larva Count': larvae_array[week],
+        'Pupa Count': pupa_array[week],
+        'Mortality Rate': mortality_rate,
+        'Developmental Rate': developmental_rate
+    })
+
+    print(f"Week {week + 1}: {larvae_array[week]:.2f} larvae, {pupa_array[week]:.2f} pupa, "
+          f"Temperature: {temperatures[week]:.2f}°C, Mortality Rate: {mortality_rate:.4f}, Developmental Rate: {developmental_rate:.4f}")
+
+# Final count after all weeks
+remaining_larvae = larvae_array[-1]
+total_pupa = sum(pupa_array)
+print(f"\nRemaining larvae after {weeks} weeks: {remaining_larvae:.2f}")
+print(f"Total pupa after {weeks} weeks: {total_pupa:.2f}")
+
+# Convert the output_data list to a DataFrame
+output_df = pd.DataFrame(output_data)
+
+# Save the output as a CSV file
+output_df.to_csv('simulation_output.csv', index=False)
+
+# Provide a link for downloading the file
+files.download('simulation_output.csv')
+
+# Plotting the results
+weeks_range = list(range(1, weeks + 1))
+
+# Plot 1: Mortality Rates vs. Week Number
+plt.figure(figsize=(10, 6))
+plt.plot(weeks_range, mortality_rates, marker='o', color='r', label='Mortality Rate')
+plt.title('Mortality Rate vs Week Number')
+plt.xlabel('Week Number')
+plt.ylabel('Mortality Rate')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+# Plot 2: Larva Counts vs. Week Number
+plt.figure(figsize=(10, 6))
+plt.plot(weeks_range, larvae_array, marker='o', color='b', label='Larva Counts')
+plt.title('Larva Counts vs Week Number')
+plt.xlabel('Week Number')
+plt.ylabel('Larva Counts')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+# Plot 3: Pupa Counts vs. Week Number
+plt.figure(figsize=(10, 6))
+plt.plot(weeks_range, pupa_array, marker='o', color='b', label='Pupa Counts')
+plt.title('Pupa Counts vs Week Number')
+plt.xlabel('Week Number')
+plt.ylabel('Pupa Counts')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+# Plot 4: CDF of Pupa Counts
+pupa_sorted = np.sort(pupa_array)  # Sort the pupa counts
+cdf = np.arange(len(pupa_sorted)) / float(len(pupa_sorted))  # Compute CDF
+
+plt.figure(figsize=(10, 6))
+plt.plot(pupa_sorted, cdf, marker='o', color='purple', label='CDF of Pupa Counts')
+plt.title('CDF of Pupa Counts')
+plt.xlabel('Pupa Counts')
+plt.ylabel('Cumulative Probability')
+plt.grid(True)
+plt.legend()
+plt.show()
